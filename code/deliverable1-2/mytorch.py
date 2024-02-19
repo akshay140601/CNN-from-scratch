@@ -88,9 +88,16 @@ class MyConv2D(nn.Module):
         ## Be careful about the size
         # ----- TODO -----
 
-        self.W = nn.parameter(torch.tensor(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1]))
+        print(self.kernel_size[0])
+
+        out_c = torch.Tensor(self.out_channels)
+        in_c = torch.Tensor(self.in_channels)
+        k1 = torch.Tensor(self.kernel_size[0])
+        k2 = torch.Tensor(self.kernel_size[1])
+
+        self.W = nn.Parameter(torch.Tensor(out_channels, in_channels, *kernel_size))
         if self.bias == True:
-            self.b = nn.parameter(torch.tensor(self.out_channels))
+            self.b = nn.Parameter(torch.Tensor(out_channels))
         else:
             self.b = None
             
@@ -204,7 +211,8 @@ if __name__ == "__main__":
     pool_kernel_size = (2, 2)
     pool_stride = (2, 2)
 
-    custom_conv_output = MyFConv2D(input_data, weight, bias, (2, 2), padding=2)
+    my_conv_layer = MyConv2D(in_channels, out_channels, (kernel_height, kernel_width), (2, 2), padding=2, bias=True)
+    custom_conv_output = my_conv_layer(input_data)
     torch_conv_output = F.conv2d(input_data, weight, bias, (2, 2), padding=2)
     assert torch.allclose(custom_conv_output, torch_conv_output, atol=1e-4), "Convolution outputs do not match!"
 
