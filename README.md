@@ -1,1 +1,1 @@
-# CNN-from-scrath
+# CNN-from-scratch
