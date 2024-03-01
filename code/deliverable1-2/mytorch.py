@@ -50,12 +50,21 @@ def MyFConv2D(input_data, weight, bias=None, stride=1, padding=0):
     ## Convolution process
     ## Feel free to use for loop 
 
-    im2col = F.unfold(x_pad, kernel_size=(weight.shape[-2], weight.shape[-1]), dilation=1, padding=0, stride=(stride_H, stride_W))
-    #print(im2col.shape)
+    '''im2col = F.unfold(x_pad, kernel_size=(weight.shape[-2], weight.shape[-1]), dilation=1, padding=0, stride=(stride_H, stride_W))
+    print(im2col.shape)
     reshape_for_mm = im2col.reshape(-1, input_data.shape[1]*weight.shape[-2]*weight.shape[-1], output_height, output_width).transpose(0, 1)
-    x_conv_out = torch.tensordot(a=weight.reshape(weight.shape[0], -1), b=reshape_for_mm, dims=1).transpose(0, 1)
+    print(reshape_for_mm.shape)
+    x_conv_out = torch.tensordot(a=weight.reshape(weight.shape[0], -1), b=reshape_for_mm, dims=1).transpose(0, 1)'''
+
+
+    for i in range(output_height):
+        for j in range(output_width):
+            receptive_field = x_pad[:, :, i*stride_H:i*stride_H + weight.shape[-2], j*stride_W:j*stride_W + weight.shape[-1]]
+            reshape_for_mm = receptive_field.reshape(input_data.shape[0], -1)
+            x_conv_out[:, :, i, j] = reshape_for_mm @ weight.reshape(weight.shape[0], -1).transpose(0, 1)
 
     if bias is not None:
+        bias = bias.to(x_conv_out.device)
         x_conv_out += bias.view(1, -1, 1, 1)
 
     return x_conv_out 
@@ -88,16 +97,22 @@ class MyConv2D(nn.Module):
         ## Be careful about the size
         # ----- TODO -----
 
-        print(self.kernel_size[0])
+        '''seed = 18786
+        #random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
-        out_c = torch.Tensor(self.out_channels)
-        in_c = torch.Tensor(self.in_channels)
-        k1 = torch.Tensor(self.kernel_size[0])
-        k2 = torch.Tensor(self.kernel_size[1])
+        weights = torch.tensor(np.random.rand(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1]))
+        print(weights)'''
 
-        self.W = nn.Parameter(torch.Tensor(out_channels, in_channels, *kernel_size))
+        self.W = nn.Parameter(torch.tensor(np.random.rand(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1]), dtype=torch.float32))
+        #print(self.W)
         if self.bias == True:
-            self.b = nn.Parameter(torch.Tensor(out_channels))
+            self.b = nn.Parameter(torch.tensor(np.random.rand(self.out_channels), dtype=torch.float32))
         else:
             self.b = None
             
@@ -182,10 +197,19 @@ class MyMaxPool2D(nn.Module):
         ## Feel free to use for loop
         # ----- TODO -----
 
-        im2col = F.unfold(x, kernel_size=self.kernel_size, stride=self.stride, dilation=1, padding=0)
+        '''im2col = F.unfold(x, kernel_size=self.kernel_size, stride=self.stride, dilation=1, padding=0)
         reshaping_for_max = im2col.reshape(self.batch_size, self.output_channels, self.kernel_size[0] * self.kernel_size[1], -1)
         max_vals, _ = torch.max(reshaping_for_max, dim=2)
-        self.x_pool_out = max_vals.reshape(self.batch_size, self.output_channels, self.output_height, self.output_width)
+        self.x_pool_out = max_vals.reshape(self.batch_size, self.output_channels, self.output_height, self.output_width)'''
+
+        for i in range(self.output_height):
+            for j in range(self.output_width):
+                receptive_field = x[:, :, i*self.stride[0]:i*self.stride[1] + self.kernel_size[0], j*self.stride[1]:j*self.stride[1] + self.kernel_size[1]]
+                max_values, _ = torch.max(receptive_field.reshape(receptive_field.size(0), receptive_field.size(1), -1), dim=2, keepdim=True)
+                #print(max_values.shape)
+                self.x_pool_out[:, :, i, j] = max_values.view(max_values.size(0), max_values.size(1))
+                #self.x_pool_out[:, :, i, j], _ = torch.max(receptive_field, dim=(2,3), keepdim=True)
+                #self.x_pool_out[:, :, i, j], _ = torch.max(self.x_pool_out, dim=3, keepdim=True)
 
         return self.x_pool_out
 
@@ -194,6 +218,15 @@ if __name__ == "__main__":
 
     ## Test your implementation of MyFConv2D.
     # ----- TODO -----
+
+    seed = 18786
+    #random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     
     batch_size = 128
     in_channels = 3
@@ -206,14 +239,18 @@ if __name__ == "__main__":
     kernel_height = 3
     kernel_width = 3
     weight = torch.tensor(np.random.rand(out_channels, in_channels, kernel_height, kernel_width), dtype=torch.float32)
+    #print(weight)
 
     bias = torch.tensor(np.random.rand(out_channels), dtype=torch.float32)
     pool_kernel_size = (2, 2)
     pool_stride = (2, 2)
 
-    my_conv_layer = MyConv2D(in_channels, out_channels, (kernel_height, kernel_width), (2, 2), padding=2, bias=True)
-    custom_conv_output = my_conv_layer(input_data)
+    #my_conv_layer = MyConv2D(in_channels, out_channels, (kernel_height, kernel_width), (2, 2), padding=2, bias=True)
+    #custom_conv_output = my_conv_layer(input_data)
+    custom_conv_output = MyFConv2D(input_data, weight, bias, (2, 2), 2)
     torch_conv_output = F.conv2d(input_data, weight, bias, (2, 2), padding=2)
+    #print('Actual: ', torch_conv_output)
+    #print('My implementation: ', custom_conv_output)
     assert torch.allclose(custom_conv_output, torch_conv_output, atol=1e-4), "Convolution outputs do not match!"
 
     custom_pool_output = MyMaxPool2D(pool_kernel_size, pool_stride)(custom_conv_output)
